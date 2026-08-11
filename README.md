@@ -4,7 +4,7 @@ A reference for deploying multi-service applications using **GitLab**, a **self-
 
 ---
 
-## 1. Overview (For Non-Technical Readers)
+## 1. Overview
 
 When a developer finishes some code, they push it to GitLab. From there, everything happens automatically:
 
@@ -68,13 +68,13 @@ sequenceDiagram
 
 ---
 
-## 3. Repository Shape (Generic)
+## 3. Repository Shape
 
 ```
 GROUP/PROJECT/
 ├── .gitlab-ci.yml
 ├── docker-compose.yml
-├── SERVICE_A/
+├── SERVICE_A
 │   ├── Dockerfile
 │   ├── requirements.txt (or package.json, etc.)
 │   └── ... app source ...
@@ -82,7 +82,7 @@ GROUP/PROJECT/
 │   ├── Dockerfile
 │   ├── package.json
 │   └── ... app source ...
-└── .env.example        # template only; real .env files are usually gitignored
+└── .env.example  
 ```
 
 - Each service folder owns its `Dockerfile`.
@@ -108,7 +108,7 @@ variables:
 
 build:service_a:
   stage: build
-  tags: [docker]
+  tags: [tag]
   image: docker:latest
   services: []   # using host Docker socket, not dind — see Runner Setup
   script:
@@ -122,7 +122,7 @@ build:service_a:
 
 build:service_b:
   stage: build
-  tags: [docker]
+  tags: [tag]
   image: docker:latest
   script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
@@ -137,7 +137,7 @@ build:service_b:
 
 test:service_a:
   stage: test
-  tags: [docker]
+  tags: [tag]
   image: python:3.12-slim   # example; use node:XX-slim, etc. as needed
   variables:
     PYTHONPATH: "."
@@ -147,7 +147,7 @@ test:service_a:
 
 test:service_b:
   stage: test
-  tags: [docker]
+  tags: [tag]
   image: node:20-slim
   script:
     - cd SERVICE_B
@@ -158,7 +158,7 @@ test:service_b:
 
 deploy:production:
   stage: deploy
-  tags: [docker]
+  tags: [tag]
   image: docker:latest
   script:
     - echo "$CI_REGISTRY_PASSWORD" | docker login -u "$CI_REGISTRY_USER" --password-stdin "$CI_REGISTRY"
@@ -175,7 +175,7 @@ Notes:
 
 ---
 
-## 5. Example `docker-compose.yml` (Server-Side)
+## 5. Example `docker-compose.yml`
 
 ```yaml
 services:
@@ -228,18 +228,7 @@ Config file location (typical): `/etc/gitlab-runner/config.toml`
 Jobs opt into this runner with:
 
 ```yaml
-tags: [docker]
-```
-
-### Design rules for this pattern
-
-1. **Prefer the host Docker socket** (`/var/run/docker.sock`) over Docker-in-Docker when the runner is configured this way — it's simpler and avoids privileged-mode overhead.
-2. **Do not set** `DOCKER_HOST=tcp://docker:2375`** unless** you're intentionally running a `docker:dind` service with `privileged = true`. Mixing socket-mounting with DinD-style variables causes confusing connection failures.
-3. **BuildKit attestation errors on push** → add `--provenance=false --sbom=false` to `docker build`, and optionally set `BUILDX_NO_DEFAULT_ATTESTATIONS=1`.
-4. **Test jobs**: prefer a language-specific `image:` (e.g. `python:3.12-slim`, `node:20-slim`) — the runner mounts the repo automatically, so you don't need to build a container just to run tests.
-5. **Avoid nested bind mounts** like `docker run -v "$CI_PROJECT_DIR:..."` from inside a job that uses the host socket. `$CI_PROJECT_DIR` is a path *inside the job container*; the host Docker daemon doesn't know that path, so the mount will silently be empty. If you need to pass files to a container launched this way, use the runner's `volumes` mapping in `config.toml` (host-path to host-path) instead.
-6. **Python import errors in tests**: set `PYTHONPATH=.` (or the appropriate package root) if the test job can't find application modules.
-7. **Registry login**: use `$CI_REGISTRY`, `$CI_REGISTRY_USER`, `$CI_REGISTRY_PASSWORD`, `$CI_REGISTRY_IMAGE` — these are provided automatically by GitLab and avoid manual secret management.
+tags: [tag]
 
 ---
 
